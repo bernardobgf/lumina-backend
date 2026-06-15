@@ -76,7 +76,6 @@ export const exerciseAnswer = async (req: Request, res: Response) => {
     const { answer } = req.body;
     const { exerciseId } = req.params;
     const id = req.user?.id;
-    let isCorrect = false;
 
     const result = await pool.query(
       "select correct_answer from exercises where id= $1",
@@ -84,7 +83,7 @@ export const exerciseAnswer = async (req: Request, res: Response) => {
     );
 
     if (!result.rowCount) {
-      return res.status(401).json({ error: "Exercicio nao existe" });
+      return res.status(404).json({ error: "Exercicio nao existe" });
     }
 
     const previousAttempts = await pool.query(
@@ -96,19 +95,24 @@ export const exerciseAnswer = async (req: Request, res: Response) => {
       ? previousAttempts.rows[0].attempts + 1
       : 1;
 
+    const isCorrect = answer === result.rows[0].correct_answer;
+
     await pool.query(
       "INSERT INTO progress(users_id, exercises_id, user_answer, is_correct, attempts) VALUES($1, $2, $3, $4, $5) ON CONFLICT (users_id, exercises_id) DO UPDATE SET attempts = progress.attempts + 1, user_answer = $3, is_correct = $4",
       [id, exerciseId, answer, isCorrect, attempts],
     );
 
-    if (answer !== result.rows[0].correct_answer) {
-      isCorrect = false;
-      return res.status(400).json({ error: "Resposta incorreta" });
+    if (!isCorrect) {
+      return res.status(400).json({
+        error: "Resposta incorreta",
+        correct: false,
+        attempts: attempts,
+      });
     }
 
-    isCorrect = true;
-
-    res.status(200).json({ message: "Reposta correta" });
+    res
+      .status(200)
+      .json({ message: "Resposta correta", correct: true, attempts: attempts });
   } catch (error) {
     res.status(500).json({ error: "Erro interno no servidor" });
   }
