@@ -8,12 +8,13 @@ export const createChat = async (req: Request, res: Response) => {
     const id = req.user?.id;
 
     const newChat = await pool.query(
-      "insert into chat (user_id,title) values($1,$2) returning id, title, creation_date",
+      "insert into chats (user_id,title) values($1,$2) returning id, title, creation_date",
       [id, title],
     );
 
     res.status(201).json({ chat: newChat.rows[0] });
   } catch (error) {
+    console.log(error);
     res.status(500).json({ error: "Erro interno no servidor" });
   }
 };
@@ -37,7 +38,7 @@ export const getChats = async (req: Request, res: Response) => {
   try {
     const user_id = req.user?.id;
 
-    const chats = await pool.query("select * from chat where user_id=$1", [
+    const chats = await pool.query("select * from chats where user_id=$1", [
       user_id,
     ]);
 
@@ -71,5 +72,72 @@ export const createMessage = async (req: Request, res: Response) => {
   } catch (error) {
     console.log(error);
     res.status(500).json({ error: "Erro interno no servidor" });
+  }
+};
+
+export const updateChatTitle = async (req: Request, res: Response) => {
+  try {
+    const { chatId } = req.params;
+    const { title } = req.body;
+    const userId = req.user?.id;
+
+    const result = await pool.query(
+      `
+      UPDATE chats
+      SET title = $1
+      WHERE id = $2 AND user_id = $3
+      RETURNING id, title
+      `,
+      [title, chatId, userId],
+    );
+
+    if (!result.rowCount) {
+      return res.status(404).json({
+        error: "Chat não encontrado",
+      });
+    }
+
+    res.status(200).json({
+      chat: result.rows[0],
+      message: "Título atualizado com sucesso",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      error: "Erro interno no servidor",
+    });
+  }
+};
+
+export const deleteChat = async (req: Request, res: Response) => {
+  try {
+    const { chatId } = req.params;
+    const userId = req.user?.id;
+
+    await pool.query("DELETE FROM messages WHERE chat_id = $1", [chatId]);
+
+    const result = await pool.query(
+      `
+      DELETE FROM chats
+      WHERE id = $1 AND user_id = $2
+      RETURNING id
+      `,
+      [chatId, userId],
+    );
+
+    if (!result.rowCount) {
+      return res.status(404).json({
+        error: "Chat não encontrado",
+      });
+    }
+
+    res.status(200).json({
+      message: "Chat removido com sucesso",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({
+      error: "Erro interno no servidor",
+    });
   }
 };
